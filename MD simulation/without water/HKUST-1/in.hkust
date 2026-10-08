@@ -1,0 +1,74 @@
+# Dry HKUST-1 pressure loading-unloading cycle.
+# Run from this directory so the structure and force-field files are found.
+# ---------- 初始化与结构选择 ----------
+variable	T	index	 0
+
+log 		${T}.log.txt
+units           real
+atom_style      full
+boundary        p p p
+box tilt        large
+
+read_data       data.water0
+
+
+
+# ---------- ReaxFF 力场与电荷平衡 ----------
+pair_style      reax/c NULL checkqeq yes safezone 1.6  mincap 100
+pair_coeff      * * CuBTC.ff O Cu C H
+neigh_modify    every 1 delay 0 check yes    
+fix             1 all qeq/reax 1 0.0 10.0 1.0e-6 reax/c
+
+
+
+
+# ---------- 原子分组与时间步长 ----------
+group           fram     id   1:4992
+variable	DT	equal	0.25
+timestep	${DT}
+variable	tdamp	equal   ${DT}*100
+variable	pdamp	equal   ${DT}*1000
+
+
+# ---------- 能量最小化与初始速度 ----------
+min_style       cg
+minimize        1.0e-4  1.0e-8  10000   10000
+reset_timestep 0
+
+
+velocity all create 300 4928459
+
+variable p0 equal "press"
+variable v0 equal "vol"
+variable e0 equal "etotal"
+
+
+# ---------- 热力学信息与轨迹输出 ----------
+thermo_style  custom step temp etotal  press pxx pyy pzz vol lx ly lz
+thermo 20000
+dump 1 all custom 20000 ${T}.final.lammpstrj  id type x y z
+
+
+# ---------- NPT 平衡阶段 ----------
+fix NPT all npt temp 300 300 ${tdamp} aniso 0 0 ${pdamp} 
+run 800000
+unfix NPT
+undump 1
+reset_timestep 0
+
+# ---------- 加载卸载过程的数据输出 ----------
+fix average all ave/time 20 100 20000 v_p0 v_v0 v_e0 file ${T}.p-v.txt
+
+dump 2 all custom 20000 ${T}.all1.xyz id type x y z 
+
+
+# ---------- 压力加载阶段 ----------
+fix NPT2 all npt temp 300 300 ${tdamp} aniso 0 6000 ${pdamp}
+run 800000
+unfix NPT2
+
+
+# ---------- 压力卸载阶段 ----------
+fix NPT3 all npt temp 300 300 ${tdamp} aniso 6000 0 ${pdamp}
+run 800000
+unfix NPT3

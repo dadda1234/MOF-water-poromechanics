@@ -1,0 +1,94 @@
+# Hydrated MIL-53 pressure loading-unloading cycle.
+# Run from this directory so the matching data file is found.
+# T is the number of water molecules in the reference structure.
+# ---------- 初始化与结构选择 ----------
+variable	T	index 1 2 3 4 5
+
+log 		${T}.log.txt
+units           real
+atom_style      full
+boundary        p p p
+
+# ---------- 力场设置 ----------
+pair_style      hybrid lj/cut/tip4p/cut 5 6 6 9 0.1546 10.0 8.5 lj/cut 12.0
+bond_style      harmonic
+angle_style     hybrid cosine/periodic harmonic
+dihedral_style  harmonic
+improper_style  fourier
+
+special_bonds   lj/coul 0.0 0.0 1.0
+pair_modify     tail yes mix arithmetic
+dielectric      1.0
+box tilt        large
+read_data       data.water.${T}
+
+set type 5 charge -1.1128
+set type 6 charge 0.5564
+
+pair_coeff   1 1 lj/cut 0.060000        3.118146 # O_2 O_2
+pair_coeff   2 2 lj/cut 0.105000        3.430851 # C_R C_R
+pair_coeff   3 3 lj/cut 0.044000        2.571134 # H_ H_
+pair_coeff   4 4 lj/cut 0.015000        2.693187 # Cr6f3 Cr6f3
+pair_coeff   5 5 lj/cut/tip4p/cut 0.1852     3.1589 # O_3 O_3
+pair_coeff   6 6 lj/cut/tip4p/cut 0.0        0.0 # H_ H_  
+
+pair_coeff   1 5 lj/cut 0.105413471624836	3.138523
+pair_coeff   2 5 lj/cut 0.139448915377639	3.2948755 
+pair_coeff   3 5 lj/cut 0.090270703996369	2.865017 
+pair_coeff   4 5 lj/cut 0.052706735812418	2.9260435
+pair_coeff   1*4 6 lj/cut 0.0       0.0 # H_ H_
+pair_coeff   5 6 lj/cut/tip4p/cut 0.0        0.0
+
+# ---------- 原子分组与时间步长 ----------
+group           1        type 5 6
+variable	DT	equal	0.5
+timestep	${DT}
+variable	tdamp	equal   ${DT}*100
+variable	pdamp	equal   ${DT}*1000
+
+
+# ---------- 初始准备（最小化命令当前未启用） ----------
+min_style       cg
+#minimize        1.0e-4  1.0e-8  10000   10000
+reset_timestep 0
+
+fix shake 1 shake 0.0001 20 0 b 6 a 9
+
+velocity all create 300 4928459
+
+
+# ---------- 热力学信息与轨迹输出 ----------
+thermo_style  custom step temp etotal  press pxx pyy pzz vol
+thermo 10000
+dump 1 all custom 10000 ${T}.final.lammpstrj  id type x y z
+
+
+# ---------- NPT 平衡阶段 ----------
+fix NPT all npt temp 300 300 ${tdamp} 0 0 ${pdamp} 
+run 1000000
+unfix NPT
+undump 1
+reset_timestep 0
+
+# ---------- 加载卸载过程的数据输出 ----------
+variable p0 equal "press"
+variable v0 equal "vol"
+fix 1 all ave/time 20 100 20000 v_p0 v_v0 file ${T}.p-v.txt
+
+dump 2 all custom 20000 ${T}.all1.xyz id type x y z 
+
+# ---------- 压力加载阶段 ----------
+fix NPT2 all npt temp 300 300 ${tdamp} aniso 0 20000 ${pdamp}
+run 2000000
+unfix NPT2
+
+# ---------- 压力卸载阶段 ----------
+fix NPT3 all npt temp 300 300 ${tdamp} aniso 20000 0 ${pdamp}
+run 2000000
+unfix NPT3 
+
+
+# ---------- 切换到下一个含水量 ----------
+clear
+next T
+jump in.water
