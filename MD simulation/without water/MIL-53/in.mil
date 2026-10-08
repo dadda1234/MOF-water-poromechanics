@@ -1,0 +1,72 @@
+# Dry MIL-53 pressure loading-unloading cycle.
+# Run from this directory so the structure file is found.
+# ---------- Initialization and structure selection ----------
+variable	T	index 0
+
+log 		${T}.log.txt
+units           real
+atom_style      full
+boundary        p p p
+
+# ---------- Force field settings ----------
+pair_style      lj/cut 12.0
+bond_style      harmonic
+angle_style     cosine/periodic
+dihedral_style  harmonic
+improper_style  fourier
+
+special_bonds   lj/coul 0.0 0.0 1.0
+pair_modify     tail yes mix arithmetic
+dielectric      1.0
+box tilt        large
+read_data       data.water${T}
+
+
+# ---------- Timestep settings ----------
+variable	DT	equal	0.5
+timestep	${DT}
+variable	tdamp	equal   ${DT}*100
+variable	pdamp	equal   ${DT}*1000
+
+
+# ---------- Initial preparation (minimization disabled) ----------
+min_style       cg
+#minimize        1.0e-4  1.0e-8  10000   10000
+reset_timestep 0
+
+
+
+velocity all create 300 123456
+
+
+# ---------- Thermodynamic and trajectory output ----------
+thermo_style  custom step temp etotal  press pxx pyy pzz vol
+thermo 10000
+dump 1 all custom 10000 ${T}.final.lammpstrj  id type x y z
+
+
+# ---------- NPT equilibration ----------
+fix NPT all npt temp 300 300 ${tdamp} aniso 0 0 ${pdamp} 
+run 1000000
+unfix NPT
+undump 1
+reset_timestep 0
+
+# ---------- Data output during loading and unloading ----------
+variable p0 equal "press"
+variable v0 equal "vol"
+fix 1 all ave/time 20 100 20000 v_p0 v_v0 file ${T}.p-v.txt
+
+dump 2 all custom 20000 ${T}.all1.xyz id type x y z 
+
+
+
+# ---------- Pressure loading ----------
+fix NPT2 all npt temp 300 300 ${tdamp} aniso 0 20000 ${pdamp}
+run 2000000
+unfix NPT2
+
+# ---------- Pressure unloading ----------
+fix NPT3 all npt temp 300 300 ${tdamp} aniso 20000 0 ${pdamp}
+run 2000000
+unfix NPT3 
