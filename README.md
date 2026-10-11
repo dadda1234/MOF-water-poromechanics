@@ -53,8 +53,6 @@ The default water loading is set by `N_VALUE` in `hkust1_config.py`. To override
 
 ```bash
 python hkust1_model.py --n 32
-python hkust1_model.py --n 32 --show
-python hkust1_model.py --n 32 --inspect
 ```
 
 This model uses a one-way survival probability, logarithmic hardening, and irreversible unloading.
@@ -78,9 +76,7 @@ python mil53_model.py
 The default water loading is set by `N_VALUE` in `mil53_config.py`. It can also be supplied at run time:
 
 ```bash
-python mil53_model.py --n 5
-python mil53_model.py --n 5 --show
-python mil53_model.py --n 5 --inspect
+python mil53_model.py --n 2
 ```
 
 This model uses a two-way survival probability, quadratic hardening, and reversible phase transformation.
